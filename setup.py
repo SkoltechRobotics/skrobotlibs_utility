@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='skrobotlibs_utility',
     version='0.1',
-    packages=['numpy'],
+    packages=[''],
     url='',
     license='',
     author='mikhail',
