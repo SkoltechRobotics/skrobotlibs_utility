@@ -262,3 +262,99 @@ def combine_maps(img, shape_output, transform, res_output, res_input):
         [np.sin(transform[2]), np.cos(transform[2]), transform[1] / res_input]
     ]) * res_input / res_output
     return cv2.warpAffine(img, transform_matrix, (shape_output[1], shape_output[0]))
+
+# ----------
+
+
+def euler_angles_to_rotation_matrix(theta):
+    r_x = np.array([[1, 0, 0], [0, np.cos(theta[0]), -np.sin(theta[0])],
+                    [0, np.sin(theta[0]),
+                     np.cos(theta[0])]])
+    r_y = np.array([[np.cos(theta[1]), 0,
+                     np.sin(theta[1])], [0, 1, 0],
+                    [-np.sin(theta[1]), 0,
+                     np.cos(theta[1])]])
+    r_z = np.array([[np.cos(theta[2]), -np.sin(theta[2]), 0],
+                    [np.sin(theta[2]), np.cos(theta[2]), 0], [0, 0, 1]])
+    r = np.dot(r_z, np.dot(r_y, r_x))
+    return r
+
+
+def make_pose3(rotation_matrix, translation_vector):
+    return np.concatenate((rotation_matrix, translation_vector[:, None]), axis=1)
+
+
+def get_rotation_matrix(pose):
+    return pose[:, :3]
+
+
+def get_translation_matrix(pose):
+    return pose[:, :3]
+
+
+def pose_multiplication3(pose1, pose2):
+    """
+    pose1 * pose2
+    :param pose1: np.ndarray shape (3x4)
+    :param pose2: np.ndarray shape (3x4)
+    :return:np.ndarray shape (3x4)
+    """
+    assert type(pose1) is np.ndarray
+    assert type(pose2) is np.ndarray
+    assert pose1.shape == (3, 4)
+    assert pose2.shape == (3, 4)
+    r1, t1 = pose1[:, :3], pose1[:, 3]
+    r2, t2 = pose2[:, :3], pose2[:, 3]
+    r = r1.dot(r2)
+    t = r1.dot(t2) + t1
+    return make_pose3(r, t)
+
+
+def inverse_pose3(pose):
+    assert type(pose) is np.ndarray
+    assert pose.shape == (3, 4)
+    r, t = pose[:, :3], pose[:, 3]
+    return make_pose3(np.linalg.inv(r), (-np.linalg.inv(r)).dot(t))
+
+
+def cvt_local2global3(local_pose, src_pose):
+    """
+    Transform pose of a robot from local 3d frame to global 3d frame, global_pose
+    pose - concatenation of rotation matrix and translation vector (coordinates of start of frame)
+    :param local_pose: np.ndarray shape (3x4)
+    :param src_pose: np.ndarray shape (3x4)
+    :return:np.ndarray shape (3x4)
+    """
+    return pose_multiplication3(src_pose, local_pose)
+
+
+def cvt_global2local3(global_pose, src_pose):
+    return pose_multiplication3(inverse_pose3(src_pose), global_pose)
+
+
+def find_src3(global_pose, local_pose):
+    return pose_multiplication3(global_pose, inverse_pose3(local_pose))
+
+
+def cvt_point2pose3(point):
+    return make_pose3(euler_angles_to_rotation_matrix([0, 0, point[2]]),
+                      np.array([point[0], point[1], 0]))
+
+
+# if __name__ == "__main__":
+#     point1 = np.array([2, 3, 3.2])
+#     point2 = np.array([3, 4, 5.2])
+#     pose1 = cvt_point2pose3(point1)
+#     pose2 = cvt_point2pose3(point2)
+#
+#     print(cvt_point2pose3(cvt_global2local2(point1, point2)))
+#     print(cvt_global2local3(pose1, pose2))
+#     print(cvt_point2pose3(cvt_global2local2(point1, point2)) - cvt_global2local3(pose1, pose2))
+#
+#     print(cvt_point2pose3(cvt_local2global2(point1, point2)))
+#     print(cvt_local2global3(pose1, pose2))
+#     print(cvt_point2pose3(cvt_local2global2(point1, point2)) - cvt_local2global3(pose1, pose2))
+#
+#     print(cvt_point2pose3(find_src2(point1, point2)))
+#     print(find_src3(pose1, pose2))
+#     print(cvt_point2pose3(find_src2(point1, point2)) - find_src3(pose1, pose2))
