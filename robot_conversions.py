@@ -44,42 +44,42 @@ def convert2xy(scan, fov=260, min_dist=0.02):
     return points[scan>min_dist]
 
 
-def convert2map(pose, points, map_pix, map_size, prob):
-    """Converts list of XY points to 2D array map in which each pixel denotes
-    probability of pixel being occupied.
-
-    Parameters
-    ----------
-    pose : ndarray
-        XY coordinates of the robot in the map reference frame
-    points : ndarray
-        List of XY points measured by sensor in the map reference frame
-    map_pix : int
-        Size of map pixel in m
-    map_size : tuple
-        Size of the map in pixels
-    prob : float
-        Probability
-
-
-    Returns
-    -------
-    map : ndarray
-        2D array representing map with dtype numpy.float32
-    """
-    zero = (pose//map_pix).astype(np.int32)
-    pixels = (points//map_pix).astype(np.int32)
-    mask = (pixels[:, 0] >= 0) & (pixels[:, 0] < map_size[0]) & \
-           (pixels[:, 1] >= 0) & (pixels[:, 1] < map_size[1])
-    pixels = pixels[mask]
-    img = Image.new('L', (map_size[1], map_size[0]))
-    draw = ImageDraw.Draw(img)
-    zero = (zero[1], zero[0])
-    for p in set([(q[1], q[0]) for q in pixels]):
-        draw.line([zero, p], fill=1)
-    data = -np.fromstring(img.tobytes(), np.int8).reshape(map_size)
-    data[pixels[:, 0], pixels[:, 1]] = 1
-    return 0.5 + prob*data.astype(np.float32)
+# def convert2map(pose, points, map_pix, map_size, prob):
+#     """Converts list of XY points to 2D array map in which each pixel denotes
+#     probability of pixel being occupied.
+#
+#     Parameters
+#     ----------
+#     pose : ndarray
+#         XY coordinates of the robot in the map reference frame
+#     points : ndarray
+#         List of XY points measured by sensor in the map reference frame
+#     map_pix : int
+#         Size of map pixel in m
+#     map_size : tuple
+#         Size of the map in pixels
+#     prob : float
+#         Probability
+#
+#
+#     Returns
+#     -------
+#     map : ndarray
+#         2D array representing map with dtype numpy.float32
+#     """
+#     zero = (pose//map_pix).astype(np.int32)
+#     pixels = (points//map_pix).astype(np.int32)
+#     mask = (pixels[:, 0] >= 0) & (pixels[:, 0] < map_size[0]) & \
+#            (pixels[:, 1] >= 0) & (pixels[:, 1] < map_size[1])
+#     pixels = pixels[mask]
+#     img = Image.new('L', (map_size[1], map_size[0]))
+#     draw = ImageDraw.Draw(img)
+#     zero = (zero[1], zero[0])
+#     for p in set([(q[1], q[0]) for q in pixels]):
+#         draw.line([zero, p], fill=1)
+#     data = -np.fromstring(img.tobytes(), np.int8).reshape(map_size)
+#     data[pixels[:, 0], pixels[:, 1]] = 1
+#     return 0.5 + prob*data.astype(np.float32)
 
 
 def cvt_local2global(local_point, src_point):
@@ -267,6 +267,11 @@ def combine_maps(img, shape_output, transform, res_output, res_input):
 
 
 def euler_angles_to_rotation_matrix(theta):
+    """
+
+    :param theta: ax (roll), ay (pitch), az (yaw)
+    :return: (3x3) matrix
+    """
     r_x = np.array([[1, 0, 0], [0, np.cos(theta[0]), -np.sin(theta[0])],
                     [0, np.sin(theta[0]),
                      np.cos(theta[0])]])
@@ -281,6 +286,12 @@ def euler_angles_to_rotation_matrix(theta):
 
 
 def make_pose3(rotation_matrix, translation_vector):
+    """
+
+    :param rotation_matrix: shape TODO
+    :param translation_vector: shape TODO
+    :return:
+    """
     return np.concatenate((rotation_matrix, translation_vector[:, None]), axis=1)
 
 
@@ -289,7 +300,7 @@ def get_rotation_matrix(pose):
 
 
 def get_translation_matrix(pose):
-    return pose[:, :3]
+    return pose[:, 3]
 
 
 def pose_multiplication3(pose1, pose2):
@@ -297,7 +308,7 @@ def pose_multiplication3(pose1, pose2):
     pose1 * pose2
     :param pose1: np.ndarray shape (3x4)
     :param pose2: np.ndarray shape (3x4)
-    :return:np.ndarray shape (3x4)
+    :return: np.ndarray shape (3x4)
     """
     assert type(pose1) is np.ndarray
     assert type(pose2) is np.ndarray
@@ -339,6 +350,31 @@ def find_src3(global_pose, local_pose):
 def cvt_point2pose3(point):
     return make_pose3(euler_angles_to_rotation_matrix([0, 0, point[2]]),
                       np.array([point[0], point[1], 0]))
+
+
+def cvt_ros_transform2pose(transform):
+    x = transform.translation.x
+    y = transform.translation.y
+    z = transform.translation.z
+    q = [transform.rotation.x,
+         transform.rotation.y,
+         transform.rotation.z,
+         transform.rotation.w]
+    ax, ay, az = tf_conversions.transformations.euler_from_quaternion(q)
+    return np.array([x, y, z, ax, ay, az])
+
+
+def transform_pc(point_cloud, transform):
+    """
+    Transform point cloud from local frame to robot frame
+    :param point_cloud: np.array (n x 3)
+    :param transform: np.array([x, y, z, ax, ay, az])
+    :return: (n x 3)
+    """
+    theta = transform[3:]
+    r = euler_angles_to_rotation_matrix(theta)
+    pc_transformed = np.dot(r, point_cloud.T)
+    return pc_transformed.T + transform[:3]
 
 
 # if __name__ == "__main__":
